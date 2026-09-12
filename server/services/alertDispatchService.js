@@ -116,10 +116,6 @@ function emailHtml(lake, risk, body) {
         <p style="margin:0 0 20px;color:#B9C9DA;font-size:15px;line-height:1.6;">
           ${body}
         </p>
-
-        <a href="${APP_URL}" style="display:inline-block;padding:11px 20px;border-radius:10px;background:#00B8FF;color:#04121F;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:8px;">
-          View live dashboard →
-        </a>
       </div>
 
       <div style="padding:16px 24px 22px;border-top:1px solid #142235;">
