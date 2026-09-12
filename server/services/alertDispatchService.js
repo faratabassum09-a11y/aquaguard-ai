@@ -133,10 +133,18 @@ async function sendViaEmail({ to, subject, body }) {
 }
 
 function composeAlertBody(lake, risk) {
+  const isUrgent = risk.riskBand === "HIGH" || risk.riskBand === "CRITICAL";
+  if (isUrgent) {
+    return (
+      `AQUAGUARD ALERT: ${lake.name} has crossed into ${risk.riskBand} risk ` +
+      `(${risk.overallRisk}/100). Immediate review recommended. This is an automated ` +
+      `decision-support alert, not a certified emergency notification.`
+    );
+  }
   return (
-    `AQUAGUARD ALERT: ${lake.name} has crossed into ${risk.riskBand} risk ` +
-    `(${risk.overallRisk}/100). Immediate review recommended. This is an automated ` +
-    `decision-support alert, not a certified emergency notification.`
+    `AQUAGUARD STATUS CHECK: ${lake.name} is currently ${risk.riskBand} risk ` +
+    `(${risk.overallRisk}/100). No action needed right now. This is an automated ` +
+    `decision-support status notification, not a certified emergency alert.`
   );
 }
 
