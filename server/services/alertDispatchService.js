@@ -83,17 +83,59 @@ async function sendViaTwilio({ to, body, channel }) {
   return { sid: data.sid, status: data.status };
 }
 
-function emailHtml(body) {
-  return `<div style="font-family:sans-serif;background:#07111F;color:#E8EEF7;padding:24px;border-radius:12px;">
-      <h2 style="color:#00B8FF;margin:0 0 12px;">AQUAGUARD AI Alert</h2>
-      <p style="font-size:15px;line-height:1.5;">${body}</p>
-      <p style="font-size:11px;color:#9FB3CC;margin-top:20px;">This is an automated decision-support alert, not a certified emergency notification.</p>
-    </div>`;
+const APP_URL = process.env.PUBLIC_APP_URL || "https://aquaguard-ai-can0.onrender.com";
+
+const BAND_STYLE = {
+  SAFE: { color: "#22C55E", bg: "rgba(34,197,94,0.12)", emoji: "✅" },
+  WATCH: { color: "#EAB308", bg: "rgba(234,179,8,0.12)", emoji: "👀" },
+  HIGH: { color: "#F97316", bg: "rgba(249,115,22,0.12)", emoji: "⚠️" },
+  CRITICAL: { color: "#EF4444", bg: "rgba(239,68,68,0.14)", emoji: "🚨" },
+};
+
+function emailHtml(lake, risk, body) {
+  const style = BAND_STYLE[risk.riskBand] || BAND_STYLE.WATCH;
+  return `
+  <div style="margin:0;padding:24px;background:#040B14;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:520px;margin:0 auto;background:#0B1826;border:1px solid #1C2E42;border-radius:16px;overflow:hidden;">
+
+      <div style="padding:20px 24px;background:linear-gradient(135deg,#062338,#031420);border-bottom:1px solid #1C2E42;">
+        <span style="font-size:13px;font-weight:700;letter-spacing:0.08em;color:#3FD0FF;text-transform:uppercase;">
+          🌊 AQUAGUARD AI
+        </span>
+      </div>
+
+      <div style="padding:28px 24px 8px;">
+        <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:${style.bg};border:1px solid ${style.color}55;color:${style.color};font-size:13px;font-weight:700;margin-bottom:16px;">
+          ${style.emoji} ${risk.riskBand} · ${risk.overallRisk}/100
+        </div>
+
+        <h1 style="margin:0 0 12px;color:#E8EEF7;font-size:20px;font-weight:700;">
+          ${lake.name}
+        </h1>
+
+        <p style="margin:0 0 20px;color:#B9C9DA;font-size:15px;line-height:1.6;">
+          ${body}
+        </p>
+
+        <a href="${APP_URL}" style="display:inline-block;padding:11px 20px;border-radius:10px;background:#00B8FF;color:#04121F;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:8px;">
+          View live dashboard →
+        </a>
+      </div>
+
+      <div style="padding:16px 24px 22px;border-top:1px solid #142235;">
+        <p style="margin:0;color:#5E7391;font-size:11px;line-height:1.5;">
+          This is an automated decision-support alert from AQUAGUARD AI, not a certified emergency notification.
+          Hyderabad watershed monitoring · powered by transparent risk simulation, not black-box predictions.
+        </p>
+      </div>
+
+    </div>
+  </div>`;
 }
 
 // Sends over HTTPS (port 443) via Resend's REST API - unaffected by hosts
 // that block outbound SMTP ports, unlike nodemailer/Gmail below.
-async function sendViaResend({ to, subject, body }) {
+async function sendViaResend({ to, subject, body, lake, risk }) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -105,7 +147,7 @@ async function sendViaResend({ to, subject, body }) {
       to: [to],
       subject,
       text: body,
-      html: emailHtml(body),
+      html: emailHtml(lake, risk, body),
     }),
   });
   const data = await res.json();
@@ -115,21 +157,21 @@ async function sendViaResend({ to, subject, body }) {
 
 // Gmail SMTP fallback - works fine locally, but will time out on hosts
 // (like Render's free tier) that block outbound SMTP ports.
-async function sendViaGmailSmtp({ to, subject, body }) {
+async function sendViaGmailSmtp({ to, subject, body, lake, risk }) {
   const transporter = getEmailTransporter();
   const info = await transporter.sendMail({
     from: `"AQUAGUARD AI" <${EMAIL_USER}>`,
     to,
     subject,
     text: body,
-    html: emailHtml(body),
+    html: emailHtml(lake, risk, body),
   });
   return { messageId: info.messageId };
 }
 
-async function sendViaEmail({ to, subject, body }) {
-  if (RESEND_API_KEY) return sendViaResend({ to, subject, body });
-  return sendViaGmailSmtp({ to, subject, body });
+async function sendViaEmail({ to, subject, body, lake, risk }) {
+  if (RESEND_API_KEY) return sendViaResend({ to, subject, body, lake, risk });
+  return sendViaGmailSmtp({ to, subject, body, lake, risk });
 }
 
 function composeAlertBody(lake, risk) {
@@ -166,6 +208,8 @@ async function dispatchCriticalAlert(subscriptions, lake, risk) {
             to: sub.email,
             subject: `AQUAGUARD Alert: ${lake.name} is ${risk.riskBand}`,
             body,
+            lake,
+            risk,
           });
           console.log(`[alertDispatch:LIVE] Sent EMAIL to ${sub.email} (messageId: ${r.messageId})`);
           results.push({ destination, channel: sub.channel, status: "sent", providerStatus: "delivered" });
