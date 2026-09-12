@@ -175,7 +175,7 @@ function templatedAnswerFallback(lake, risk, optimization, forecast, question, t
 
   if (/which lake|what lake|name of (the )?lake|what is this/.test(q)) {
     return (
-      `You're looking at ${lake.name}${lake.location ? `, in ${lake.location}` : ""}. ` +
+      `You're looking at ${lake.name}${lake.localName && lake.localName !== lake.name ? ` (${lake.localName})` : ""}. ` +
       `It's currently rated ${risk.riskBand} risk at ${risk.overallRisk}/100.`
     );
   }
