@@ -196,8 +196,8 @@ async function answerQuestion(lake, risk, optimization, forecast, question, tool
   return (
     `Based on current data for ${lake.name}: overall risk is ${risk.overallRisk}/100 (${risk.riskBand}). ` +
     `The top recommended intervention is "${optimization?.recommended?.strategy}", ` +
-    `projected to bring risk down to ${optimization?.recommended?.projectedRisk}%. ` +
-    `(Connect an LLM_API_KEY in server/.env for free-form conversational answers.)`
+    `projected to bring risk down to ${optimization?.recommended?.projectedRisk}%. ` 
+    
   );
 }
 
