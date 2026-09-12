@@ -2,18 +2,20 @@
  * alertDispatchService.js
  *
  * Sends critical-risk alerts to subscribers via THREE independent, each
- * separately-pluggable channels: SMS, WhatsApp (both via Twilio), and email
- * (via Gmail SMTP using nodemailer). Each channel detects its own
- * credentials and falls back to a clearly-labeled SIMULATED send if they're
- * missing - so a judge running this with zero configuration still sees the
- * full subscribe -> critical -> dispatch flow end to end for every channel,
- * and any channel that IS configured sends for real.
+ * separately-pluggable channels: SMS, WhatsApp (both via Twilio), and email.
  *
- * Email is deliberately the easiest "real" channel to light up: it needs
- * only a Gmail address + a free App Password, with none of the regulatory
- * requirements SMS/WhatsApp carry in some countries (e.g. India's TRAI DLT
- * sender registration for SMS, or WhatsApp's Business-verified Content
- * Template requirement) - see README for why that matters here.
+ * Email has TWO possible transports, tried in this order:
+ *   1. Resend's HTTPS API (RESEND_API_KEY) - sends over port 443, which
+ *      works on every host including Render's free tier, which blocks
+ *      outbound SMTP (ports 25/465/587) entirely as of Sept 2025.
+ *   2. Gmail SMTP via nodemailer (EMAIL_USER + EMAIL_APP_PASSWORD) - kept
+ *      as a fallback for local development, where SMTP isn't blocked.
+ *
+ * Each channel detects its own credentials and falls back to a
+ * clearly-labeled SIMULATED send if none are configured - so a judge
+ * running this with zero configuration still sees the full
+ * subscribe -> critical -> dispatch flow end to end for every channel, and
+ * any channel that IS configured sends for real.
  */
 
 const nodemailer = require("nodemailer");
@@ -25,10 +27,16 @@ const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || "";
 const TWILIO_CONTENT_SID = process.env.TWILIO_CONTENT_SID || ""; // optional, see .env.example
 const TWILIO_LIVE = Boolean(TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM);
 
-// ---------- Email (Gmail SMTP) ----------
+// ---------- Email: Resend HTTPS API (preferred - works on Render free tier) ----------
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const RESEND_FROM = process.env.RESEND_FROM || "AQUAGUARD AI <onboarding@resend.dev>";
+
+// ---------- Email: Gmail SMTP fallback (local dev only - Render free tier blocks this) ----------
 const EMAIL_USER = process.env.EMAIL_USER || "";
 const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD || "";
-const EMAIL_LIVE = Boolean(EMAIL_USER && EMAIL_APP_PASSWORD);
+const EMAIL_SMTP_LIVE = Boolean(EMAIL_USER && EMAIL_APP_PASSWORD);
+
+const EMAIL_LIVE = Boolean(RESEND_API_KEY) || EMAIL_SMTP_LIVE;
 
 let emailTransporter = null;
 function getEmailTransporter() {
@@ -75,20 +83,53 @@ async function sendViaTwilio({ to, body, channel }) {
   return { sid: data.sid, status: data.status };
 }
 
-async function sendViaEmail({ to, subject, body }) {
+function emailHtml(body) {
+  return `<div style="font-family:sans-serif;background:#07111F;color:#E8EEF7;padding:24px;border-radius:12px;">
+      <h2 style="color:#00B8FF;margin:0 0 12px;">AQUAGUARD AI Alert</h2>
+      <p style="font-size:15px;line-height:1.5;">${body}</p>
+      <p style="font-size:11px;color:#9FB3CC;margin-top:20px;">This is an automated decision-support alert, not a certified emergency notification.</p>
+    </div>`;
+}
+
+// Sends over HTTPS (port 443) via Resend's REST API - unaffected by hosts
+// that block outbound SMTP ports, unlike nodemailer/Gmail below.
+async function sendViaResend({ to, subject, body }) {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM,
+      to: [to],
+      subject,
+      text: body,
+      html: emailHtml(body),
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Resend send failed");
+  return { messageId: data.id };
+}
+
+// Gmail SMTP fallback - works fine locally, but will time out on hosts
+// (like Render's free tier) that block outbound SMTP ports.
+async function sendViaGmailSmtp({ to, subject, body }) {
   const transporter = getEmailTransporter();
   const info = await transporter.sendMail({
     from: `"AQUAGUARD AI" <${EMAIL_USER}>`,
     to,
     subject,
     text: body,
-    html: `<div style="font-family:sans-serif;background:#07111F;color:#E8EEF7;padding:24px;border-radius:12px;">
-      <h2 style="color:#00B8FF;margin:0 0 12px;">AQUAGUARD AI Alert</h2>
-      <p style="font-size:15px;line-height:1.5;">${body}</p>
-      <p style="font-size:11px;color:#9FB3CC;margin-top:20px;">This is an automated decision-support alert, not a certified emergency notification.</p>
-    </div>`,
+    html: emailHtml(body),
   });
   return { messageId: info.messageId };
+}
+
+async function sendViaEmail({ to, subject, body }) {
+  if (RESEND_API_KEY) return sendViaResend({ to, subject, body });
+  return sendViaGmailSmtp({ to, subject, body });
 }
 
 function composeAlertBody(lake, risk) {
