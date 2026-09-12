@@ -102,7 +102,7 @@ export default function AlertSubscribeForm({ lakeId, lakeName }: { lakeId: strin
         >
           📧 Email
         </button>
-        <button
+        {/* <button
           type="button"
           onClick={() => setChannel("whatsapp")}
           className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium ${
@@ -110,8 +110,8 @@ export default function AlertSubscribeForm({ lakeId, lakeName }: { lakeId: strin
           }`}
         >
           📱 WhatsApp
-        </button>
-        <button
+        </button> */}
+        {/* <button
           type="button"
           onClick={() => setChannel("sms")}
           className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium ${
@@ -119,7 +119,7 @@ export default function AlertSubscribeForm({ lakeId, lakeName }: { lakeId: strin
           }`}
         >
           💬 SMS
-        </button>
+        </button> */}
       </div>
 
       {channel === "email" ? (
